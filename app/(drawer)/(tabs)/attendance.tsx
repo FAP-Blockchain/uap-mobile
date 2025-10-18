@@ -163,8 +163,9 @@ export default function AttendancePage() {
         key={course.courseCode}
         style={styles.courseCard}
         onPress={() => {
-          // Navigate to course details
-          console.log("Navigate to course details:", course.courseCode);
+          router.push(
+            `/(drawer)/(tabs)/attendance-detail/${course.courseCode}` as any
+          );
         }}
         activeOpacity={0.8}
       >
