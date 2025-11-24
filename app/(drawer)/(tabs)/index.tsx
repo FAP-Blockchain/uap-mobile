@@ -52,7 +52,7 @@ export default function HomePage() {
     },
     {
       title: "Attendance",
-      icon: "checkcircle",
+      icon: "checkcircleo",
       color: "#3674B5",
       onPress: () => router.push("/(drawer)/(tabs)/attendance" as any),
     },
@@ -64,7 +64,7 @@ export default function HomePage() {
     },
     {
       title: "Certificate",
-      icon: "SafetyCertificate",
+      icon: "Safety",
       color: "#3674B5",
       onPress: () => router.push("/(drawer)/(tabs)/student-home" as any),
     },
@@ -142,7 +142,7 @@ export default function HomePage() {
             <Text style={styles.studentPortalButtonText}>
               Access Student Portal
             </Text>
-            <AntDesign name={"arrowright" as any} size={16} color="#fff" />
+            <AntDesign name="right" size={16} color="#fff" />
           </TouchableOpacity>
         </View>
       </View>
