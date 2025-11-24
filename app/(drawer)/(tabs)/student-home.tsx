@@ -58,7 +58,7 @@ export default function StudentHomePage() {
     },
     {
       title: "Certificates",
-      icon: "SafetyCertificate",
+      icon: "Safety",
       color: "#1890ff",
       backgroundColor: "#e6f7ff",
       onPress: () => router.push("/(drawer)/certificates" as any),
@@ -111,7 +111,7 @@ export default function StudentHomePage() {
           <View style={styles.statsRow}>
             <View style={styles.statCard}>
               <View style={styles.statIcon}>
-                <AntDesign name="FileText1" size={24} color="#1890ff" />
+                <AntDesign name="filetext1" size={24} color="#1890ff" />
               </View>
               <Text style={styles.statNumber}>
                 {dashboardStats.totalCredentials}

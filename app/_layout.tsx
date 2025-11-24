@@ -60,20 +60,7 @@ export default function RootLayout() {
                     }}
                   />
                   <Stack.Screen
-                    name="form-detail"
-                    options={{
-                      headerShown: false,
-                      presentation: "modal",
-                    }}
-                  />
-                  <Stack.Screen
-                    name="form-list"
-                    options={{
-                      headerShown: false,
-                    }}
-                  />
-                  <Stack.Screen
-                    name="form-detail-view"
+                    name="forgot-password"
                     options={{
                       headerShown: false,
                       presentation: "modal",
