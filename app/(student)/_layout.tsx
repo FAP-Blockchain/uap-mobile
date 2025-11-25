@@ -35,7 +35,7 @@ export default function DrawerLayout() {
     } finally {
       dispatch(clearAuthData());
       await AsyncStorage.clear();
-      router.replace("/login" as any);
+      router.replace("/(auth)/login" as any);
     }
   }, [dispatch]);
 

@@ -1,7 +1,8 @@
 export interface dtoUserInfor {
-  id: string | bigint;
-  code: string;
+  id: string;
+  code?: string;
   userName: string;
-  password?: string;
-  role?: "STUDENT" | "VERIFIER" | "GUEST";
+  email?: string;
+  role: "STUDENT" | "TEACHER" | "ADMIN" | "GUEST" | "VERIFIER";
+  walletAddress?: string;
 }

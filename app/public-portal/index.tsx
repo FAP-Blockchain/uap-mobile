@@ -51,7 +51,7 @@ export default function PublicPortalHome() {
 
       <TouchableOpacity
         style={styles.loginButton}
-        onPress={() => router.replace("/login" as any)}
+        onPress={() => router.replace("/(auth)/login" as any)}
       >
         <Text style={styles.loginText}>Quay lại đăng nhập</Text>
       </TouchableOpacity>

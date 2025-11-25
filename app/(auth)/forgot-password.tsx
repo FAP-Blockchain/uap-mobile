@@ -249,7 +249,7 @@ const ForgotPasswordScreen: React.FC = () => {
         text1Style: { textAlign: "center", fontSize: 16 },
       });
       setTimeout(() => {
-        router.replace("/login");
+        router.replace("/(auth)/login");
       }, 2000);
     } catch (error: any) {
       const errorMessage =
