@@ -1,26 +1,18 @@
 import api from "@/config/axios";
-import { LoginFormValues } from "@/types/auth/login";
+import {
+  ChangePasswordRequest,
+  ChangePasswordWithOtpRequest,
+  LoginRequest,
+  OtpResponse,
+  RefreshTokenRequest,
+  ResetPasswordWithOtpRequest,
+  SendOtpRequest,
+} from "@/types/auth/api";
 
 const url = "/Auth";
 
-export interface SendOtpRequest {
-  email: string;
-  purpose?: string;
-}
-
-export interface ResetPasswordWithOtpRequest {
-  email: string;
-  otpCode: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-export interface OtpResponse {
-  message: string;
-}
-
 export const AuthenServices = {
-  loginUser: (values: LoginFormValues) => {
+  loginUser: (values: LoginRequest) => {
     // Backend expects Email and Password
     return api.post(`${url}/login`, {
       Email: values.email,
@@ -29,6 +21,11 @@ export const AuthenServices = {
   },
   logout: () => {
     return api.post(`${url}/logout`);
+  },
+  refreshToken: (request: RefreshTokenRequest) => {
+    return api.post(`${url}/refresh-token`, {
+      RefreshToken: request.refreshToken,
+    });
   },
   sendOtp: (request: SendOtpRequest): Promise<OtpResponse> => {
     return api.post(`${url}/send-otp`, {
@@ -42,6 +39,21 @@ export const AuthenServices = {
     return api.post(`${url}/reset-password-with-otp`, {
       Email: request.email,
       OtpCode: request.otpCode,
+      NewPassword: request.newPassword,
+      ConfirmPassword: request.confirmPassword,
+    });
+  },
+  changePassword: (request: ChangePasswordRequest) => {
+    return api.post(`${url}/change-password`, {
+      CurrentPassword: request.currentPassword,
+      NewPassword: request.newPassword,
+      ConfirmPassword: request.confirmPassword,
+    });
+  },
+  changePasswordWithOtp: (request: ChangePasswordWithOtpRequest) => {
+    return api.post(`${url}/change-password-with-otp`, {
+      OtpCode: request.otpCode,
+      CurrentPassword: request.currentPassword,
       NewPassword: request.newPassword,
       ConfirmPassword: request.confirmPassword,
     });

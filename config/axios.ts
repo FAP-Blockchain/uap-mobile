@@ -17,7 +17,8 @@ api.interceptors.request.use(
     const isPublicEndpoint = config.url?.includes("/login") || 
                             config.url?.includes("/refresh-token") ||
                             config.url?.includes("/send-otp") ||
-                            config.url?.includes("/reset-password");
+                            config.url?.includes("/reset-password") ||
+                            config.url?.includes("/logout");
     
     if (!token && !isPublicEndpoint) {
       return Promise.reject(new Error("No token"));

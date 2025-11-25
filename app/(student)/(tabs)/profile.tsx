@@ -55,7 +55,7 @@ export default function ProfilePage() {
           } finally {
             dispatch(clearAuthData());
             await AsyncStorage.clear();
-            router.replace("/login" as any);
+            router.replace("/(auth)/login" as any);
           }
         },
       },
