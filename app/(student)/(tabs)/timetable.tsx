@@ -1,158 +1,270 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
-  View,
   TouchableOpacity,
-  ScrollView,
-  Dimensions,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSelector } from "react-redux";
 import { selectAuthLogin } from "../../../lib/features/loginSlice";
-import { AntDesign } from "@expo/vector-icons";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { StudentServices } from "../../../services/student/studentServices";
+import type {
+  WeeklyScheduleDto,
+  ScheduleItemDto,
+  DailyScheduleDto,
+} from "../../../types/schedule";
+import Toast from "react-native-toast-message";
 
-const { width } = Dimensions.get("window");
+const palette = {
+  primary: "#3674B5",
+  secondary: "#2196F3",
+  success: "#4CAF50",
+  warning: "#FFB347",
+  error: "#F44336",
+  background: "#F1F5FF",
+  card: "#FFFFFF",
+  surface: "#F7FAFF",
+  text: "#1F2933",
+  subtitle: "#6B7280",
+};
 
 interface ClassInfo {
-  courseCode: string;
-  courseName: string;
-  instructor: string;
-  room: string;
-  building: string;
+  slotId: string;
+  classId: string;
+  classCode: string;
+  subjectCode: string;
+  subjectName: string;
+  teacherName?: string;
+  date: string;
+  timeSlotName?: string;
+  startTime?: string;
+  endTime?: string;
   attendance?: "attended" | "absent" | "not_yet";
-  week: string;
-  slot: number;
-  time: string;
+  status?: string;
+  rawSlot: ScheduleItemDto;
 }
 
-interface DaySchedule {
-  day: string;
-  date: string;
-  classes: ClassInfo[];
-}
+const dayMappings: Record<
+  string,
+  { label: string; shortLabel: string; order: number }
+> = {
+  Monday: { label: "Thứ Hai", shortLabel: "T2", order: 0 },
+  Tuesday: { label: "Thứ Ba", shortLabel: "T3", order: 1 },
+  Wednesday: { label: "Thứ Tư", shortLabel: "T4", order: 2 },
+  Thursday: { label: "Thứ Năm", shortLabel: "T5", order: 3 },
+  Friday: { label: "Thứ Sáu", shortLabel: "T6", order: 4 },
+  Saturday: { label: "Thứ Bảy", shortLabel: "T7", order: 5 },
+  Sunday: { label: "Chủ Nhật", shortLabel: "CN", order: 6 },
+};
+
+const formatTimeRange = (start?: string, end?: string): string => {
+  if (!start || !end) return "—";
+
+  try {
+    let startTime = start;
+    let endTime = end;
+
+    if (start.includes("T")) {
+      const date = new Date(start);
+      startTime = `${String(date.getHours()).padStart(2, "0")}:${String(
+        date.getMinutes()
+      ).padStart(2, "0")}`;
+    } else if (start.includes(":")) {
+      const parts = start.split(":");
+      startTime = `${parts[0]}:${parts[1]}`;
+    }
+
+    if (end.includes("T")) {
+      const date = new Date(end);
+      endTime = `${String(date.getHours()).padStart(2, "0")}:${String(
+        date.getMinutes()
+      ).padStart(2, "0")}`;
+    } else if (end.includes(":")) {
+      const parts = end.split(":");
+      endTime = `${parts[0]}:${parts[1]}`;
+    }
+
+    return `${startTime} - ${endTime}`;
+  } catch {
+    return "—";
+  }
+};
+
+const formatDate = (dateString: string): string => {
+  try {
+    const date = new Date(dateString);
+    return `${String(date.getDate()).padStart(2, "0")}/${String(
+      date.getMonth() + 1
+    ).padStart(2, "0")}`;
+  } catch {
+    return "—";
+  }
+};
+
+const getMondayOfWeek = (date: Date): Date => {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const formatWeekRange = (date: Date): string => {
+  const monday = getMondayOfWeek(date);
+  const sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+
+  return `${formatDate(monday.toISOString())} - ${formatDate(
+    sunday.toISOString()
+  )}`;
+};
 
 export default function TimetablePage() {
   const insets = useSafeAreaInsets();
   const auth = useSelector(selectAuthLogin);
   const [selectedWeek, setSelectedWeek] = useState(new Date());
+  const [weeklySchedule, setWeeklySchedule] =
+    useState<WeeklyScheduleDto | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock timetable data organized by days
-  const weekSchedule: DaySchedule[] = [
-    {
-      day: "Thứ Hai",
-      date: "22/09",
-      classes: [],
+  const mapAttendance = useCallback(
+    (slot: ScheduleItemDto): ClassInfo["attendance"] => {
+      if (slot.isPresent === true) return "attended";
+      if (slot.isPresent === false) return "absent";
+      if (slot.hasAttendance) return "not_yet";
+      return undefined;
     },
-    {
-      day: "Thứ Ba",
-      date: "23/09",
-      classes: [
-        {
-          courseCode: "HCM202",
-          courseName: "Ho Chi Minh Ideology",
-          instructor: "Dr. Nguyen Van A",
-          room: "NVH 409",
-          building: "NVH",
-          attendance: "attended",
-          week: "22/09 - 28/09",
-          slot: 1,
-          time: "07:30 - 09:20",
-        },
-        {
-          courseCode: "MLN131",
-          courseName: "Marxist-Leninist Philosophy",
-          instructor: "Prof. Tran Thi B",
-          room: "NVH 502",
-          building: "NVH",
-          attendance: "attended",
-          week: "22/09 - 28/09",
-          slot: 3,
-          time: "12:30 - 14:20",
-        },
-      ],
+    []
+  );
+
+  const convertSlotToClassInfo = useCallback(
+    (slot: ScheduleItemDto): ClassInfo => {
+      return {
+        slotId: slot.slotId,
+        classId: slot.classId,
+        classCode: slot.classCode,
+        subjectCode: slot.subjectCode,
+        subjectName: slot.subjectName,
+        teacherName: slot.teacherName,
+        date: slot.date,
+        timeSlotName: slot.timeSlotName,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+        attendance: mapAttendance(slot),
+        status: slot.status,
+        rawSlot: slot,
+      };
     },
-    {
-      day: "Thứ Tư",
-      date: "24/09",
-      classes: [],
+    [mapAttendance]
+  );
+
+  const fetchWeeklySchedule = useCallback(
+    async (week: Date, isRefresh = false) => {
+      const monday = getMondayOfWeek(week);
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setIsLoading(true);
+      }
+      setError(null);
+
+      try {
+        const data = await StudentServices.getMyWeeklySchedule(
+          monday.toISOString()
+        );
+        setWeeklySchedule(data);
+      } catch (err: any) {
+        const message =
+          err?.response?.data?.message ||
+          err?.message ||
+          "Không thể tải dữ liệu thời khóa biểu.";
+        setError(message);
+        setWeeklySchedule(null);
+        Toast.show({
+          type: "error",
+          text1: "Lỗi",
+          text2: message,
+          text1Style: { textAlign: "center", fontSize: 16 },
+        });
+      } finally {
+        setIsLoading(false);
+        setRefreshing(false);
+      }
     },
-    {
-      day: "Thứ Năm",
-      date: "25/09",
-      classes: [
-        {
-          courseCode: "HCM202",
-          courseName: "Ho Chi Minh Ideology",
-          instructor: "Dr. Nguyen Van A",
-          room: "NVH 409",
-          building: "NVH",
-          attendance: "not_yet",
-          week: "22/09 - 28/09",
-          slot: 1,
-          time: "07:30 - 09:20",
-        },
-        {
-          courseCode: "MLN131",
-          courseName: "Marxist-Leninist Philosophy",
-          instructor: "Prof. Tran Thi B",
-          room: "NVH 502",
-          building: "NVH",
-          attendance: "not_yet",
-          week: "22/09 - 28/09",
-          slot: 3,
-          time: "12:30 - 14:20",
-        },
-      ],
-    },
-    {
-      day: "Thứ Sáu",
-      date: "26/09",
-      classes: [],
-    },
-    {
-      day: "Thứ Bảy",
-      date: "27/09",
-      classes: [
-        {
-          courseCode: "SEP490",
-          courseName: "Capstone Project",
-          instructor: "Mr. Le Van C",
-          room: "P.136",
-          building: "Alpha",
-          attendance: "not_yet",
-          week: "22/09 - 28/09",
-          slot: 3,
-          time: "12:30 - 14:20",
-        },
-      ],
-    },
-    {
-      day: "Chủ Nhật",
-      date: "28/09",
-      classes: [],
-    },
-  ];
+    []
+  );
 
   useEffect(() => {
-    console.log("TimetablePage mounted", auth);
-    if (auth?.userProfile) {
-      console.log("User from Redux:", auth.userProfile);
-    }
-  }, [auth]);
+    fetchWeeklySchedule(selectedWeek);
+  }, [selectedWeek, fetchWeeklySchedule]);
+
+  const handleWeekChange = useCallback((direction: "prev" | "next") => {
+    setSelectedWeek((prev) => {
+      const newDate = new Date(prev);
+      if (direction === "prev") {
+        newDate.setDate(newDate.getDate() - 7);
+      } else {
+        newDate.setDate(newDate.getDate() + 7);
+      }
+      return newDate;
+    });
+  }, []);
+
+  const handleCurrentWeek = useCallback(() => {
+    setSelectedWeek(new Date());
+  }, []);
+
+  const onRefresh = useCallback(() => {
+    fetchWeeklySchedule(selectedWeek, true);
+  }, [selectedWeek, fetchWeeklySchedule]);
+
+  const organizedDays = useMemo(() => {
+    if (!weeklySchedule) return [];
+
+    const days = weeklySchedule.days
+      .map((day) => {
+        const meta = dayMappings[day.dayOfWeek];
+        if (!meta) return null;
+
+        const classes = day.slots.map(convertSlotToClassInfo);
+
+        return {
+          ...meta,
+          date: day.date,
+          classes: classes.sort((a, b) => {
+            const timeA = a.startTime || "00:00";
+            const timeB = b.startTime || "00:00";
+            return timeA.localeCompare(timeB);
+          }),
+        };
+      })
+      .filter((day): day is NonNullable<typeof day> => day !== null)
+      .sort((a, b) => a.order - b.order);
+
+    return days;
+  }, [weeklySchedule, convertSlotToClassInfo]);
 
   const getAttendanceColor = (attendance?: string) => {
     switch (attendance) {
       case "attended":
-        return "#52c41a";
+        return palette.success;
       case "absent":
-        return "#ff4d4f";
+        return palette.error;
       case "not_yet":
-        return "#faad14";
+        return palette.warning;
       default:
-        return "#8c8c8c";
+        return palette.subtitle;
     }
   };
 
@@ -163,7 +275,7 @@ export default function TimetablePage() {
       case "absent":
         return "Vắng mặt";
       case "not_yet":
-        return "Chưa đến";
+        return "Chưa có";
       default:
         return "";
     }
@@ -176,144 +288,164 @@ export default function TimetablePage() {
       case "absent":
         return "close-circle";
       case "not_yet":
-        return "exclamation-circle";
+        return "clock-outline";
       default:
-        return "question-circle";
+        return "help-circle";
     }
   };
 
-  const handleWeekChange = (direction: "prev" | "next") => {
-    const newDate = new Date(selectedWeek);
-    if (direction === "prev") {
-      newDate.setDate(newDate.getDate() - 7);
-    } else {
-      newDate.setDate(newDate.getDate() + 7);
-    }
-    setSelectedWeek(newDate);
-  };
+  const handleViewDetails = useCallback((classInfo: ClassInfo) => {
+    router.push(
+      `/(student)/(tabs)/attendance-detail/${classInfo.classCode}` as any
+    );
+  }, []);
 
-  const formatWeekRange = (date: Date) => {
-    const startOfWeek = new Date(date);
-    const day = startOfWeek.getDay();
-    const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
-    startOfWeek.setDate(diff);
+  const renderClassCard = useCallback(
+    (classInfo: ClassInfo) => {
+      const timeRange = formatTimeRange(
+        classInfo.startTime,
+        classInfo.endTime
+      );
 
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-
-    return `${startOfWeek.getDate()}/${
-      startOfWeek.getMonth() + 1
-    } - ${endOfWeek.getDate()}/${
-      endOfWeek.getMonth() + 1
-    }/${endOfWeek.getFullYear()}`;
-  };
-
-  const handleViewDetails = (classInfo: ClassInfo) => {
-    router.push(`/(student)/class-detail/${classInfo.courseCode}` as any);
-  };
-
-  const renderClassCard = (classInfo: ClassInfo) => {
-    return (
-      <TouchableOpacity
-        key={`${classInfo.courseCode}-${classInfo.slot}`}
-        style={styles.classCard}
-        onPress={() => handleViewDetails(classInfo)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.classCardContent}>
-          <View style={styles.classHeader}>
-            <View style={styles.classInfo}>
-              <Text style={styles.courseCode}>{classInfo.courseCode}</Text>
-              <Text style={styles.courseName} numberOfLines={2}>
-                {classInfo.courseName}
-              </Text>
+      return (
+        <TouchableOpacity
+          key={`${classInfo.slotId}-${classInfo.date}`}
+          style={styles.classCard}
+          onPress={() => handleViewDetails(classInfo)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.classCardContent}>
+            <View style={styles.classHeader}>
+              <View style={styles.classInfo}>
+                <Text style={styles.courseCode}>{classInfo.subjectCode}</Text>
+                <Text style={styles.courseName} numberOfLines={2}>
+                  {classInfo.subjectName}
+                </Text>
+              </View>
+              <View style={styles.timeBadge}>
+                <Text style={styles.timeText}>
+                  {classInfo.timeSlotName || timeRange}
+                </Text>
+              </View>
             </View>
-            <View style={styles.timeBadge}>
-              <Text style={styles.timeText}>{classInfo.time}</Text>
-            </View>
-          </View>
 
-          <View style={styles.classDetails}>
-            <View style={styles.detailRow}>
-              <AntDesign name="home" size={14} color="#8c8c8c" />
-              <Text style={styles.detailText}>
-                {classInfo.room} - {classInfo.building}
-              </Text>
+            <View style={styles.classDetails}>
+              {classInfo.teacherName && (
+                <View style={styles.detailRow}>
+                  <MaterialCommunityIcons
+                    name="account"
+                    size={14}
+                    color={palette.subtitle}
+                  />
+                  <Text style={styles.detailText}>{classInfo.teacherName}</Text>
+                </View>
+              )}
+              <View style={styles.detailRow}>
+                <MaterialCommunityIcons
+                  name="map-marker"
+                  size={14}
+                  color={palette.subtitle}
+                />
+                <Text style={styles.detailText}>
+                  {classInfo.rawSlot.notes || classInfo.classCode}
+                </Text>
+              </View>
             </View>
-            <View style={styles.detailRow}>
-              <AntDesign name="user" size={14} color="#8c8c8c" />
-              <Text style={styles.detailText}>{classInfo.instructor}</Text>
-            </View>
-          </View>
 
-          <View style={styles.classFooter}>
-            <View style={styles.attendanceContainer}>
-              <AntDesign
-                name={getAttendanceIcon(classInfo.attendance) as any}
-                size={14}
-                color={getAttendanceColor(classInfo.attendance)}
-              />
-              <Text
-                style={[
-                  styles.attendanceText,
-                  { color: getAttendanceColor(classInfo.attendance) },
-                ]}
+            <View style={styles.classFooter}>
+              {classInfo.attendance && (
+                <View style={styles.attendanceContainer}>
+                  <MaterialCommunityIcons
+                    name={getAttendanceIcon(classInfo.attendance) as any}
+                    size={14}
+                    color={getAttendanceColor(classInfo.attendance)}
+                  />
+                  <Text
+                    style={[
+                      styles.attendanceText,
+                      { color: getAttendanceColor(classInfo.attendance) },
+                    ]}
+                  >
+                    {getAttendanceText(classInfo.attendance)}
+                  </Text>
+                </View>
+              )}
+              <TouchableOpacity
+                style={styles.detailsButton}
+                onPress={() => handleViewDetails(classInfo)}
               >
-                {getAttendanceText(classInfo.attendance)}
-              </Text>
+                <Text style={styles.detailsButtonText}>Chi tiết</Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={16}
+                  color={palette.primary}
+                />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.detailsButton}
-              onPress={() => handleViewDetails(classInfo)}
-            >
-              <Text style={styles.detailsButtonText}>Chi tiết</Text>
-              <AntDesign name="right" size={12} color="#3674B5" />
-            </TouchableOpacity>
           </View>
-        </View>
-      </TouchableOpacity>
-    );
-  };
+        </TouchableOpacity>
+      );
+    },
+    [handleViewDetails]
+  );
 
-  const renderDaySchedule = (daySchedule: DaySchedule) => {
-    return (
-      <View key={daySchedule.day} style={styles.dayContainer}>
-        <View style={styles.dayHeader}>
-          <View style={styles.dayInfo}>
-            <Text style={styles.dayName}>{daySchedule.day}</Text>
-            <Text style={styles.dayDate}>{daySchedule.date}</Text>
+  const renderDaySchedule = useCallback(
+    (day: {
+      label: string;
+      shortLabel: string;
+      date: string;
+      classes: ClassInfo[];
+    }) => {
+      return (
+        <View key={day.label} style={styles.dayContainer}>
+          <View style={styles.dayHeader}>
+            <View style={styles.dayInfo}>
+              <Text style={styles.dayName}>{day.label}</Text>
+              <Text style={styles.dayDate}>{formatDate(day.date)}</Text>
+            </View>
+            <View style={styles.classCount}>
+              <Text style={styles.classCountText}>{day.classes.length} lớp</Text>
+            </View>
           </View>
-          <View style={styles.classCount}>
-            <Text style={styles.classCountText}>
-              {daySchedule.classes.length} lớp
-            </Text>
-          </View>
-        </View>
 
-        {daySchedule.classes.length > 0 ? (
-          <View style={styles.classesContainer}>
-            {daySchedule.classes.map((classInfo) => renderClassCard(classInfo))}
-          </View>
-        ) : (
-          <View style={styles.emptyDay}>
-            <AntDesign name="calendar" size={32} color="#d9d9d9" />
-            <Text style={styles.emptyDayText}>Không có lớp học</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+          {day.classes.length > 0 ? (
+            <View style={styles.classesContainer}>
+              {day.classes.map((classInfo) => renderClassCard(classInfo))}
+            </View>
+          ) : (
+            <View style={styles.emptyDay}>
+              <MaterialCommunityIcons
+                name="calendar-blank"
+                size={40}
+                color={palette.subtitle}
+              />
+              <Text style={styles.emptyDayText}>Không có lớp học</Text>
+            </View>
+          )}
+        </View>
+      );
+    },
+    [renderClassCard]
+  );
 
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
-      {/* Header */}
-      <LinearGradient colors={["#3674B5", "#1890ff"]} style={styles.header}>
+      <LinearGradient
+        colors={[palette.primary, palette.secondary]}
+        style={styles.header}
+      >
         <View style={styles.headerContent}>
           <View style={styles.headerInfo}>
             <Text style={styles.headerTitle}>Thời Khóa Biểu</Text>
             <Text style={styles.headerSubtitle}>
-              Tuần: {formatWeekRange(selectedWeek)}
+              {weeklySchedule?.weekLabel ||
+                `Tuần: ${formatWeekRange(selectedWeek)}`}
             </Text>
+            {weeklySchedule && (
+              <Text style={styles.headerMeta}>
+                Tổng số ca: {weeklySchedule.totalSlots}
+              </Text>
+            )}
           </View>
 
           <View style={styles.headerActions}>
@@ -321,54 +453,91 @@ export default function TimetablePage() {
               style={styles.navButton}
               onPress={() => handleWeekChange("prev")}
             >
-              <AntDesign name="left" size={16} color="#fff" />
+              <MaterialCommunityIcons name="chevron-left" size={20} color="#fff" />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.navButton}
-              onPress={() => setSelectedWeek(new Date())}
+              onPress={handleCurrentWeek}
             >
-              <Text style={styles.currentWeekText}>Tuần này</Text>
+              <Text style={styles.currentWeekText}>Hôm nay</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.navButton}
               onPress={() => handleWeekChange("next")}
             >
-              <AntDesign name="right" size={16} color="#fff" />
+              <MaterialCommunityIcons name="chevron-right" size={20} color="#fff" />
             </TouchableOpacity>
           </View>
         </View>
       </LinearGradient>
 
-      {/* Week Schedule */}
-      <ScrollView
-        style={styles.scheduleContainer}
-        showsVerticalScrollIndicator={false}
-      >
-        {weekSchedule.map((daySchedule) => renderDaySchedule(daySchedule))}
-      </ScrollView>
-
-      {/* Legend */}
-      <View style={styles.legendContainer}>
-        <Text style={styles.legendTitle}>Chú thích:</Text>
-        <View style={styles.legendItems}>
-          <View style={styles.legendItem}>
-            <AntDesign name={"check-circle" as any} size={12} color="#52c41a" />
-            <Text style={styles.legendText}>Đã tham gia</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <AntDesign name={"close-circle" as any} size={12} color="#ff4d4f" />
-            <Text style={styles.legendText}>Vắng mặt</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <AntDesign
-              name={"exclamation-circle" as any}
-              size={12}
-              color="#faad14"
-            />
-            <Text style={styles.legendText}>Chưa đến</Text>
-          </View>
+      {isLoading && !refreshing ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={palette.primary} />
+          <Text style={styles.loadingText}>Đang tải thời khóa biểu...</Text>
         </View>
-      </View>
+      ) : error && !weeklySchedule ? (
+        <View style={styles.errorContainer}>
+          <MaterialCommunityIcons
+            name="alert-circle"
+            size={48}
+            color={palette.error}
+          />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => fetchWeeklySchedule(selectedWeek)}
+          >
+            <Text style={styles.retryButtonText}>Thử lại</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.scheduleContainer}
+          contentContainerStyle={{ paddingBottom: 16 }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[palette.primary]}
+              tintColor={palette.primary}
+            />
+          }
+        >
+          {organizedDays.map((day) => renderDaySchedule(day))}
+
+          <View style={styles.legendContainer}>
+            <Text style={styles.legendTitle}>Chú thích:</Text>
+            <View style={styles.legendItems}>
+              <View style={styles.legendItem}>
+                <MaterialCommunityIcons
+                  name="check-circle"
+                  size={14}
+                  color={palette.success}
+                />
+                <Text style={styles.legendText}>Đã tham gia</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={14}
+                  color={palette.error}
+                />
+                <Text style={styles.legendText}>Vắng mặt</Text>
+              </View>
+              <View style={styles.legendItem}>
+                <MaterialCommunityIcons
+                  name="clock-outline"
+                  size={14}
+                  color={palette.warning}
+                />
+                <Text style={styles.legendText}>Chưa có</Text>
+              </View>
+            </View>
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -376,218 +545,259 @@ export default function TimetablePage() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#f5f5f5",
+    backgroundColor: palette.background,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    paddingBottom: 20,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    paddingBottom: 24,
   },
   headerContent: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    gap: 16,
   },
   headerInfo: {
-    flex: 1,
+    gap: 4,
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 4,
   },
   headerSubtitle: {
+    fontSize: 16,
+    color: "#fff",
+    opacity: 0.95,
+  },
+  headerMeta: {
     fontSize: 14,
     color: "#fff",
-    opacity: 0.9,
+    opacity: 0.85,
   },
   headerActions: {
     flexDirection: "row",
     gap: 8,
+    alignItems: "center",
   },
   navButton: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 20,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
     alignItems: "center",
     justifyContent: "center",
+    minWidth: 44,
   },
   currentWeekText: {
     color: "#fff",
     fontSize: 12,
-    fontWeight: "500",
+    fontWeight: "600",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: palette.subtitle,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 32,
+    gap: 16,
+  },
+  errorText: {
+    fontSize: 16,
+    color: palette.text,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: palette.primary,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
   },
   scheduleContainer: {
     flex: 1,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
+    paddingTop: 16,
   },
   dayContainer: {
     marginBottom: 16,
-    backgroundColor: "#fff",
-    borderRadius: 12,
+    backgroundColor: palette.card,
+    borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
+    overflow: "hidden",
   },
   dayHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     padding: 16,
-    backgroundColor: "#f8f9fa",
-    borderTopLeftRadius: 12,
-    borderTopRightRadius: 12,
+    backgroundColor: palette.surface,
   },
   dayInfo: {
-    flexDirection: "row",
-    alignItems: "center",
+    gap: 4,
   },
   dayName: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: "bold",
-    color: "#262626",
-    marginRight: 8,
+    color: palette.text,
   },
   dayDate: {
     fontSize: 14,
-    color: "#8c8c8c",
+    color: palette.subtitle,
   },
   classCount: {
-    backgroundColor: "#3674B5",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    backgroundColor: palette.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
   },
   classCountText: {
     fontSize: 12,
     color: "#fff",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   classesContainer: {
     padding: 16,
+    gap: 12,
   },
   emptyDay: {
-    padding: 32,
+    padding: 40,
     alignItems: "center",
     justifyContent: "center",
+    gap: 8,
   },
   emptyDayText: {
     fontSize: 14,
-    color: "#8c8c8c",
-    marginTop: 8,
+    color: palette.subtitle,
   },
   classCard: {
-    backgroundColor: "#f9f9f9",
-    borderRadius: 8,
-    marginBottom: 12,
+    backgroundColor: palette.surface,
+    borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: "#3674B5",
+    borderLeftColor: palette.primary,
+    overflow: "hidden",
   },
   classCardContent: {
     padding: 16,
+    gap: 12,
   },
   classHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
+    gap: 12,
   },
   classInfo: {
     flex: 1,
+    gap: 4,
   },
   courseCode: {
     fontSize: 16,
     fontWeight: "bold",
-    color: "#3674B5",
-    marginBottom: 4,
+    color: palette.primary,
   },
   courseName: {
     fontSize: 14,
-    color: "#262626",
-    lineHeight: 18,
+    color: palette.text,
+    lineHeight: 20,
   },
   timeBadge: {
-    backgroundColor: "#e6f7ff",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    backgroundColor: "rgba(54, 116, 181, 0.1)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     borderRadius: 12,
   },
   timeText: {
-    fontSize: 12,
-    color: "#3674B5",
-    fontWeight: "500",
+    fontSize: 11,
+    color: palette.primary,
+    fontWeight: "600",
   },
   classDetails: {
-    marginBottom: 12,
+    gap: 8,
   },
   detailRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 6,
+    gap: 8,
   },
   detailText: {
-    fontSize: 14,
-    color: "#595959",
-    marginLeft: 8,
+    fontSize: 13,
+    color: palette.subtitle,
+    flex: 1,
   },
   classFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(0, 0, 0, 0.05)",
   },
   attendanceContainer: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
   attendanceText: {
     fontSize: 12,
-    marginLeft: 4,
-    fontWeight: "500",
+    fontWeight: "600",
   },
   detailsButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    gap: 4,
   },
   detailsButtonText: {
     fontSize: 12,
-    color: "#3674B5",
-    fontWeight: "500",
-    marginRight: 4,
+    color: palette.primary,
+    fontWeight: "600",
   },
   legendContainer: {
-    backgroundColor: "#fff",
-    margin: 12,
+    backgroundColor: palette.card,
+    marginTop: 8,
+    marginBottom: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
     elevation: 3,
   },
   legendTitle: {
     fontSize: 14,
     fontWeight: "bold",
-    color: "#262626",
-    marginBottom: 8,
+    color: palette.text,
+    marginBottom: 12,
   },
   legendItems: {
     flexDirection: "row",
     justifyContent: "space-around",
+    flexWrap: "wrap",
+    gap: 16,
   },
   legendItem: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
   },
   legendText: {
     fontSize: 12,
-    color: "#8c8c8c",
-    marginLeft: 4,
+    color: palette.subtitle,
   },
 });
