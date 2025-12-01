@@ -25,6 +25,12 @@ export default function TeacherLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="grading"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }

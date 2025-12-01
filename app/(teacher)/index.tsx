@@ -68,7 +68,7 @@ export default function TeacherHomeScreen() {
         icon: "file-document-edit",
         gradient: ["#FBCF6A", "#F7931A"],
         onPress: () => {
-          Alert.alert("Thông báo", "Tính năng đang phát triển");
+          router.push("/(teacher)/grading" as any);
         },
       },
       {
