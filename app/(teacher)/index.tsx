@@ -76,7 +76,7 @@ export default function TeacherHomeScreen() {
         icon: "book-open-variant",
         gradient: ["#BC99FF", "#8155E5"],
         onPress: () => {
-          Alert.alert("Thông báo", "Tính năng đang phát triển");
+          router.push("/(teacher)/classes" as any);
         },
       },
     ],

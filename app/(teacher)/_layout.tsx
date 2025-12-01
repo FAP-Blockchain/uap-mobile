@@ -31,6 +31,12 @@ export default function TeacherLayout() {
           headerShown: false,
         }}
       />
+      <Stack.Screen
+        name="classes"
+        options={{
+          headerShown: false,
+        }}
+      />
     </Stack>
   );
 }
