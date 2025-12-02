@@ -5,10 +5,7 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
 import { useDispatch, useSelector } from "react-redux";
-import {
-  clearAuthData,
-  selectAuthLogin,
-} from "../../lib/features/loginSlice";
+import { clearAuthData, selectAuthLogin } from "../../lib/features/loginSlice";
 import { AuthenServices } from "../../services/auth/authenServices";
 import Toast from "react-native-toast-message";
 
@@ -41,97 +38,84 @@ export default function DrawerLayout() {
 
   // Custom drawer content
   const renderDrawerContent = useCallback(() => {
-      return (
-        <View style={{ flex: 1, paddingTop: 50 }}>
-          <Text
-            style={{
-              padding: 16,
-              fontSize: 20,
-              fontWeight: "bold",
-              color: "#3674B5",
-              borderBottomWidth: 1,
-              borderBottomColor: "#eee",
-              marginTop: 30,
-            }}
-          >
+    return (
+      <View style={{ flex: 1, paddingTop: 50 }}>
+        <Text
+          style={{
+            padding: 16,
+            fontSize: 20,
+            fontWeight: "bold",
+            color: "#3674B5",
+            borderBottomWidth: 1,
+            borderBottomColor: "#eee",
+            marginTop: 30,
+          }}
+        >
           Student Portal
-          </Text>
+        </Text>
 
-              <Pressable
+        <Pressable
           onPress={() => router.push("/(student)/(tabs)" as any)}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#f0f0f0" : "transparent",
-                  borderRadius: 8,
-                  padding: 16,
-                })}
-              >
-                <Text style={{ fontSize: 16, color: "#333" }}>Home</Text>
-              </Pressable>
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? "#f0f0f0" : "transparent",
+            borderRadius: 8,
+            padding: 16,
+          })}
+        >
+          <Text style={{ fontSize: 16, color: "#333" }}>Home</Text>
+        </Pressable>
 
-              <Pressable
+        <Pressable
           onPress={() => router.push("/(student)/(tabs)/student-home" as any)}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#f0f0f0" : "transparent",
-                  borderRadius: 8,
-                  padding: 16,
-                })}
-              >
-                <Text style={{ fontSize: 16, color: "#333" }}>Profile</Text>
-              </Pressable>
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? "#f0f0f0" : "transparent",
+            borderRadius: 8,
+            padding: 16,
+          })}
+        >
+          <Text style={{ fontSize: 16, color: "#333" }}>Profile</Text>
+        </Pressable>
 
-              <Pressable
+        <Pressable
           onPress={() => router.push("/(student)/(tabs)/timetable" as any)}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#f0f0f0" : "transparent",
-                  borderRadius: 8,
-                  padding: 16,
-                })}
-              >
-                <Text style={{ fontSize: 16, color: "#333" }}>Timetable</Text>
-              </Pressable>
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? "#f0f0f0" : "transparent",
+            borderRadius: 8,
+            padding: 16,
+          })}
+        >
+          <Text style={{ fontSize: 16, color: "#333" }}>Timetable</Text>
+        </Pressable>
 
-              <Pressable
+        <Pressable
           onPress={() => router.push("/(student)/(tabs)/attendance" as any)}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#f0f0f0" : "transparent",
-                  borderRadius: 8,
-                  padding: 16,
-                })}
-              >
-                <Text style={{ fontSize: 16, color: "#333" }}>Attendance</Text>
-              </Pressable>
+          style={({ pressed }) => ({
+            backgroundColor: pressed ? "#f0f0f0" : "transparent",
+            borderRadius: 8,
+            padding: 16,
+          })}
+        >
+          <Text style={{ fontSize: 16, color: "#333" }}>Attendance</Text>
+        </Pressable>
 
-              <Pressable
-          onPress={() => router.push("/(student)/chat" as any)}
-                style={({ pressed }) => ({
-                  backgroundColor: pressed ? "#f0f0f0" : "transparent",
-                  borderRadius: 8,
-                  padding: 16,
-                })}
-              >
-                <Text style={{ fontSize: 16, color: "#333" }}>Chat App</Text>
-              </Pressable>
-
-          <View style={{ marginTop: "auto", padding: 16 }}>
-            <Pressable
-              onPress={handleLogout}
-              style={({ pressed }) => ({
-                backgroundColor: pressed ? "#ffebee" : "#fff",
-                borderRadius: 8,
-                padding: 16,
-                borderWidth: 1,
-                borderColor: "#ff4d4f",
-              })}
-            >
-              <Text
-                style={{ fontSize: 16, color: "#ff4d4f", fontWeight: "600" }}
-              >
-                Logout
-              </Text>
-            </Pressable>
-          </View>
+        <View style={{ marginTop: "auto", padding: 16 }}>
+          <Pressable
+            onPress={handleLogout}
+            style={({ pressed }) => ({
+              backgroundColor: pressed ? "#ffebee" : "#fff",
+              borderRadius: 8,
+              padding: 16,
+              borderWidth: 1,
+              borderColor: "#ff4d4f",
+            })}
+          >
+            <Text style={{ fontSize: 16, color: "#ff4d4f", fontWeight: "600" }}>
+              Logout
+            </Text>
+          </Pressable>
         </View>
-      );
+      </View>
+    );
   }, [handleLogout]);
 
   return (
@@ -151,13 +135,6 @@ export default function DrawerLayout() {
           options={{
             drawerLabel: "Home",
             title: "Home",
-          }}
-        />
-        <Drawer.Screen
-          name="chat"
-          options={{
-            drawerLabel: "Chat App",
-            title: "Chat App",
           }}
         />
       </Drawer>
