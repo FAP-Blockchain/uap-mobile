@@ -227,18 +227,6 @@ export default function HomePage() {
           >
             <MaterialCommunityIcons name="menu" size={22} color="#fff" />
           </TouchableOpacity>
-          <View style={{ flex: 1 }} />
-          <TouchableOpacity
-            style={styles.menuButton}
-            onPress={() => router.push("/(student)/chat" as any)}
-            activeOpacity={0.85}
-          >
-            <MaterialCommunityIcons
-              name="message-text-outline"
-              size={20}
-              color="#fff"
-            />
-          </TouchableOpacity>
         </View>
         <View style={styles.heroContent}>
           <View style={{ flex: 1 }}>
