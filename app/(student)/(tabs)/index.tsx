@@ -24,6 +24,12 @@ import {
   List,
   ProgressBar,
 } from "react-native-paper";
+import { StudentCredentialServices } from "@/services/student/credentialServices";
+import { StudentAttendanceServices } from "@/services/student/attendanceServices";
+import { RoadmapServices } from "@/services/student/roadmapServices";
+import type { StudentCredentialDto } from "@/types/credential";
+import type { AttendanceStatisticsDto } from "@/types/attendance";
+import type { CurriculumRoadmapSummaryDto } from "@/types/roadmap";
 
 const palette = {
   primary: "#3674B5",
@@ -41,7 +47,13 @@ export default function HomePage() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingDashboard, setLoadingDashboard] = useState(false);
   const auth = useSelector(selectAuthLogin);
+  const [credentials, setCredentials] = useState<StudentCredentialDto[]>([]);
+  const [attendanceStats, setAttendanceStats] =
+    useState<AttendanceStatisticsDto | null>(null);
+  const [roadmapSummary, setRoadmapSummary] =
+    useState<CurriculumRoadmapSummaryDto | null>(null);
 
   useEffect(() => {
     const ensureStudentRole = async () => {
@@ -53,6 +65,35 @@ export default function HomePage() {
     };
     ensureStudentRole();
   }, [auth]);
+
+  const loadDashboardData = useCallback(async () => {
+    try {
+      setLoadingDashboard(true);
+      const [creds, attendance, roadmap] = await Promise.all([
+        StudentCredentialServices.getMyCredentials().catch((err) => {
+          console.error("Failed to load credentials", err);
+          return [] as StudentCredentialDto[];
+        }),
+        StudentAttendanceServices.getMyAttendanceStatistics().catch((err) => {
+          console.error("Failed to load attendance stats", err);
+          return null as AttendanceStatisticsDto | null;
+        }),
+        RoadmapServices.getMyCurriculumRoadmapSummary().catch((err) => {
+          console.error("Failed to load roadmap summary", err);
+          return null as CurriculumRoadmapSummaryDto | null;
+        }),
+      ]);
+      setCredentials(creds);
+      setAttendanceStats(attendance);
+      setRoadmapSummary(roadmap);
+    } finally {
+      setLoadingDashboard(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadDashboardData();
+  }, [loadDashboardData]);
 
   const quickActions = useMemo(
     () => [
@@ -91,107 +132,70 @@ export default function HomePage() {
     []
   );
 
-  const statsCards = useMemo(
-    () => [
+  const statsCards = useMemo(() => {
+    const totalCredentials = credentials.length;
+    const issued = credentials.filter((c) => c.status === "Issued").length;
+    const pending = credentials.filter((c) => c.status === "Pending").length;
+    const blockchain = credentials.filter((c) => c.isOnBlockchain).length;
+    const attendanceRate =
+      attendanceStats?.attendanceRate != null
+        ? Math.round(attendanceStats.attendanceRate)
+        : null;
+
+    return [
       {
         title: "Tổng chứng chỉ",
-        value: "08",
-        trend: "+2 tháng này",
+        value: totalCredentials.toString(),
+        trend:
+          blockchain > 0
+            ? `${blockchain} trên blockchain`
+            : "Chưa có blockchain",
         color: "#5FA8F5",
         icon: "file-document",
       },
       {
-        title: "Đã xác thực",
-        value: "06",
-        trend: "75% hợp lệ",
+        title: "Đã phát hành",
+        value: issued.toString(),
+        trend:
+          totalCredentials > 0
+            ? `${Math.round(
+                (issued / Math.max(totalCredentials, 1)) * 100
+              )}% tổng số`
+            : "—",
         color: "#53D769",
         icon: "check-circle",
       },
       {
-        title: "Đang chờ xử lý",
-        value: "02",
-        trend: "Cần xem lại",
+        title: "Điểm danh",
+        value: attendanceRate != null ? `${attendanceRate}%` : "--",
+        trend:
+          attendanceStats && attendanceStats.totalSlots > 0
+            ? `${attendanceStats.presentCount}/${attendanceStats.totalSlots} buổi có mặt`
+            : "Chưa có dữ liệu",
         color: "#FFB347",
         icon: "clock-outline",
       },
-    ],
-    []
-  );
+    ];
+  }, [credentials, attendanceStats]);
 
-  const recentCredentials = useMemo(
-    () => [
-      {
-        id: "deg_01",
-        title: "Bachelor of Software Engineering",
-        issuer: "FPT University",
-        status: "Hoạt động",
-        statusColor: palette.success,
-        issueDate: "15/06/2024",
-        icon: "medal-outline",
-      },
-      {
-        id: "cert_02",
-        title: "React Advanced Certification",
-        issuer: "Meta",
-        status: "Đang chờ",
-        statusColor: palette.warning,
-        issueDate: "28/02/2024",
-        icon: "shield-check-outline",
-      },
-      {
-        id: "trans_03",
-        title: "Academic Transcript - Spring 2024",
-        issuer: "FPT University",
-        status: "Hoạt động",
-        statusColor: palette.secondary,
-        issueDate: "10/01/2024",
-        icon: "book-open-variant",
-      },
-    ],
-    []
-  );
-
-  const recentActivities = useMemo(
-    () => [
-      {
-        id: 1,
-        title: "Chứng chỉ được xác thực",
-        description: "Bằng cử nhân đã được xác thực bởi TechCorp Vietnam",
-        time: "2 giờ trước",
-        icon: "check-circle",
-        color: palette.success,
-      },
-      {
-        id: 2,
-        title: "Mã QR được tạo",
-        description: "AWS Cloud Practitioner đã sẵn sàng chia sẻ",
-        time: "1 ngày trước",
-        icon: "qrcode",
-        color: palette.primary,
-      },
-      {
-        id: 3,
-        title: "Chứng chỉ mới được cấp",
-        description: "Bảng điểm học kỳ Spring 2024 vừa cập nhật",
-        time: "3 ngày trước",
-        icon: "file-document",
-        color: palette.secondary,
-      },
-    ],
-    []
-  );
+  const recentCredentials = useMemo(() => {
+    const sorted = [...credentials].sort(
+      (a, b) =>
+        new Date(b.issuedDate).getTime() - new Date(a.issuedDate).getTime()
+    );
+    return sorted.slice(0, 3);
+  }, [credentials]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      Alert.alert("Thành công", "Dashboard đã được cập nhật.");
-    } catch (error) {
+      await loadDashboardData();
+    } catch {
       Alert.alert("Lỗi", "Không thể làm mới dữ liệu. Vui lòng thử lại.");
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [loadDashboardData]);
 
   return (
     <ScrollView
@@ -386,7 +390,7 @@ export default function HomePage() {
             <Chip
               compact
               onPress={() =>
-                router.push("/(student)/(tabs)/student-home" as any)
+                router.push("/(student)/(tabs)/my-credentials" as any)
               }
             >
               Xem tất cả
@@ -397,64 +401,42 @@ export default function HomePage() {
               <View style={styles.credentialRow}>
                 <View style={styles.credentialIcon}>
                   <MaterialCommunityIcons
-                    name={item.icon as any}
+                    name="file-document"
                     size={22}
                     color={palette.primary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.credentialTitle}>{item.title}</Text>
-                  <Text style={styles.credentialIssuer}>{item.issuer}</Text>
-                  <Text style={styles.credentialDate}>{item.issueDate}</Text>
+                  <Text style={styles.credentialTitle}>
+                    {item.subjectName ||
+                      item.roadmapName ||
+                      item.certificateType}
+                  </Text>
+                  <Text style={styles.credentialIssuer}>
+                    {item.semesterName || item.studentName || ""}
+                  </Text>
+                  <Text style={styles.credentialDate}>
+                    {new Date(item.issuedDate).toLocaleDateString("vi-VN")}
+                  </Text>
                 </View>
                 <Chip
                   compact
-                  style={{ backgroundColor: `${item.statusColor}20` }}
-                  textStyle={{ color: item.statusColor, fontWeight: "600" }}
+                  style={{ backgroundColor: "rgba(54,116,181,0.12)" }}
+                  textStyle={{ color: palette.primary, fontWeight: "600" }}
                 >
-                  {item.status}
+                  {item.status === "Issued"
+                    ? "Đã phát hành"
+                    : item.status === "Pending"
+                    ? "Đang xử lý"
+                    : item.status === "Revoked"
+                    ? "Đã thu hồi"
+                    : item.status}
                 </Chip>
               </View>
               {index !== recentCredentials.length - 1 && (
                 <Divider style={{ marginVertical: 12 }} />
               )}
             </View>
-          ))}
-        </Card>
-      </View>
-
-      <View style={styles.section}>
-        <Card style={styles.sectionCard} elevation={2}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Hoạt động mới nhất</Text>
-            <Chip compact>Nhật ký</Chip>
-          </View>
-          {recentActivities.map((activity) => (
-            <List.Item
-              key={activity.id}
-              title={activity.title}
-              description={activity.description}
-              descriptionNumberOfLines={2}
-              titleStyle={styles.activityTitle}
-              descriptionStyle={styles.activityDescription}
-              right={() => (
-                <Text style={styles.activityTime}>{activity.time}</Text>
-              )}
-              left={() => (
-                <View
-                  style={[
-                    styles.activityIcon,
-                    { backgroundColor: `${activity.color}20` },
-                  ]}
-                >
-                  <MaterialCommunityIcons
-                    name={activity.icon as any}
-                    size={20}
-                    color={activity.color}
-                  />
-                </View>
-              )}
-            />
           ))}
         </Card>
       </View>
