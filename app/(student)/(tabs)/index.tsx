@@ -69,19 +69,34 @@ export default function HomePage() {
   const loadDashboardData = useCallback(async () => {
     try {
       setLoadingDashboard(true);
+      const role = (
+        (await AsyncStorage.getItem("role")) ||
+        auth?.userProfile?.role ||
+        ""
+      )
+        .toString()
+        .toUpperCase();
+      const isStudent = role === "STUDENT";
+
       const [creds, attendance, roadmap] = await Promise.all([
         StudentCredentialServices.getMyCredentials().catch((err) => {
-          console.error("Failed to load credentials", err);
+          console.warn("Failed to load credentials", err);
           return [] as StudentCredentialDto[];
         }),
-        StudentAttendanceServices.getMyAttendanceStatistics().catch((err) => {
-          console.error("Failed to load attendance stats", err);
-          return null as AttendanceStatisticsDto | null;
-        }),
-        RoadmapServices.getMyCurriculumRoadmapSummary().catch((err) => {
-          console.error("Failed to load roadmap summary", err);
-          return null as CurriculumRoadmapSummaryDto | null;
-        }),
+        isStudent
+          ? StudentAttendanceServices.getMyAttendanceStatistics().catch(
+              (err) => {
+                console.warn("Failed to load attendance stats", err);
+                return null as AttendanceStatisticsDto | null;
+              }
+            )
+          : Promise.resolve(null as AttendanceStatisticsDto | null),
+        isStudent
+          ? RoadmapServices.getMyCurriculumRoadmapSummary().catch((err) => {
+              console.warn("Failed to load roadmap summary", err);
+              return null as CurriculumRoadmapSummaryDto | null;
+            })
+          : Promise.resolve(null as CurriculumRoadmapSummaryDto | null),
       ]);
       setCredentials(creds);
       setAttendanceStats(attendance);

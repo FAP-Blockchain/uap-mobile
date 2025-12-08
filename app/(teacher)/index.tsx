@@ -1,6 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { DrawerActions, useNavigation } from "@react-navigation/native";
 import {
   Alert,
@@ -17,6 +17,8 @@ import { clearAuthData, selectAuthLogin } from "../../lib/features/loginSlice";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { AuthenServices } from "../../services/auth/authenServices";
+import { TeacherServices } from "@/services/teacher/teacherServices";
+import type { WeeklyScheduleDto, ScheduleItemDto } from "@/types/schedule";
 import Toast from "react-native-toast-message";
 import {
   Avatar,
@@ -44,6 +46,9 @@ export default function TeacherHomeScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [schedule, setSchedule] = useState<WeeklyScheduleDto | null>(null);
   const auth = useSelector(selectAuthLogin);
   const dispatch = useDispatch();
 
@@ -89,80 +94,120 @@ export default function TeacherHomeScreen() {
     []
   );
 
-  const statsCards = useMemo(
-    () => [
+  const allSlots = useMemo<ScheduleItemDto[]>(() => {
+    if (!schedule?.days) return [];
+    return schedule.days.flatMap((d) => d.slots || []);
+  }, [schedule]);
+
+  const statsCards = useMemo(() => {
+    const classMap = new Map<string, number>();
+    allSlots.forEach((slot) => {
+      if (!slot.classId) return;
+      const current = classMap.get(slot.classId) ?? 0;
+      const students = slot.totalStudents ?? 0;
+      classMap.set(slot.classId, Math.max(current, students));
+    });
+    const totalClasses = classMap.size;
+    const totalStudents = Array.from(classMap.values()).reduce(
+      (sum, v) => sum + v,
+      0
+    );
+    const totalSlots = schedule?.totalSlots ?? allSlots.length;
+
+    return [
       {
         title: "Lớp đang dạy",
-        value: "05",
-        trend: "Học kỳ này",
+        value: totalClasses.toString(),
+        trend: schedule?.weekLabel || "Tuần hiện tại",
         color: "#5FA8F5",
         icon: "book-open-page-variant",
       },
       {
         title: "Sinh viên",
-        value: "120",
-        trend: "Tổng số",
+        value: totalStudents.toString(),
+        trend: "Ước tính theo lịch",
         color: "#53D769",
         icon: "account-group",
       },
       {
         title: "Ca dạy tuần",
-        value: "12",
-        trend: "Tuần này",
+        value: totalSlots.toString(),
+        trend: "Theo lịch tuần",
         color: "#FFB347",
         icon: "calendar-check",
       },
-    ],
-    []
-  );
+    ];
+  }, [allSlots, schedule]);
 
-  const upcomingClasses = useMemo(
-    () => [
-      {
-        id: "1",
-        classCode: "CS101.W25.A",
-        subjectName: "Programming Fundamentals",
-        time: "07:30 - 09:20",
-        date: "Hôm nay",
-        status: "Sắp diễn ra",
-        statusColor: palette.primary,
-        icon: "clock-outline",
-      },
-      {
-        id: "2",
-        classCode: "CS102.W25.B",
-        subjectName: "Data Structures",
-        time: "09:30 - 11:20",
-        date: "Hôm nay",
-        status: "Sắp diễn ra",
-        statusColor: palette.primary,
-        icon: "clock-outline",
-      },
-      {
-        id: "3",
-        classCode: "CS101.W25.A",
-        subjectName: "Programming Fundamentals",
-        time: "12:30 - 14:20",
-        date: "Ngày mai",
-        status: "Chưa điểm danh",
-        statusColor: palette.warning,
-        icon: "alert-circle-outline",
-      },
-    ],
-    []
-  );
+  const upcomingClasses = useMemo(() => {
+    const now = new Date();
+    const parsed = allSlots
+      .map((slot) => {
+        const startIso = slot.startTime
+          ? `${slot.date}T${slot.startTime}`
+          : `${slot.date}T00:00`;
+        const dt = new Date(startIso);
+        return { slot, dt };
+      })
+      .filter((item) => !Number.isNaN(item.dt.getTime()) && item.dt >= now)
+      .sort((a, b) => a.dt.getTime() - b.dt.getTime())
+      .slice(0, 3)
+      .map(({ slot, dt }) => ({
+        id: slot.slotId || `${slot.classId}-${slot.timeSlotId}-${slot.date}`,
+        classCode: slot.classCode || "Lớp",
+        subjectName: slot.subjectName || "Môn học",
+        time:
+          slot.startTime && slot.endTime
+            ? `${slot.startTime} - ${slot.endTime}`
+            : slot.timeSlotName || "Chưa rõ ca",
+        date: new Date(slot.date).toLocaleDateString("vi-VN", {
+          weekday: "short",
+          day: "2-digit",
+          month: "2-digit",
+        }),
+        status: slot.hasAttendance
+          ? "Đã điểm danh"
+          : dt > now
+          ? "Sắp diễn ra"
+          : "Chưa điểm danh",
+        statusColor: slot.hasAttendance ? palette.success : palette.primary,
+        icon: slot.hasAttendance ? "check-circle-outline" : "clock-outline",
+      }));
+    return parsed;
+  }, [allSlots]);
+
+  const loadSchedule = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await TeacherServices.getMyWeeklySchedule();
+      setSchedule(data);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message || err?.message || "Không thể tải lịch.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSchedule();
+  }, [loadSchedule]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      Alert.alert("Thành công", "Dashboard đã được cập nhật.");
-    } catch (error) {
+      await loadSchedule();
+      if (!error) {
+        Alert.alert("Thành công", "Dashboard đã được cập nhật.");
+      }
+    } catch {
       Alert.alert("Lỗi", "Không thể làm mới dữ liệu. Vui lòng thử lại.");
     } finally {
       setRefreshing(false);
     }
-  }, []);
+  }, [loadSchedule, error]);
 
   const handleLogout = useCallback(() => {
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn đăng xuất?", [
@@ -199,7 +244,7 @@ export default function TeacherHomeScreen() {
   }, [dispatch]);
 
   const handleClassPress = (classItem: (typeof upcomingClasses)[0]) => {
-    // Navigate to schedule screen - user can select slot from there
+    // Điều hướng tới schedule để chọn slot và tiếp tục điểm danh / chấm điểm
     router.push("/(teacher)/schedule" as any);
   };
 
