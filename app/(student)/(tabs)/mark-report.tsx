@@ -1,5 +1,5 @@
 import { router } from "expo-router";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   StyleSheet,
   Text,
@@ -9,69 +9,108 @@ import {
   Dimensions,
 } from "react-native";
 import BackHeader from "@/components/BackHeader";
+import { RoadmapServices } from "@/services/student/roadmapServices";
+import type {
+  CurriculumRoadmapSummaryDto,
+  CurriculumSemesterDto,
+  CurriculumRoadmapSubjectDto,
+} from "@/types/roadmap";
 
 const { width } = Dimensions.get("window");
 
-interface CourseReport {
-  courseCode: string;
-  courseName: string;
-  className: string;
-  average: number;
-  status: "Passed" | "Failed";
-}
-
 export default function MarkReportPage() {
-  const [selectedSemester, setSelectedSemester] = useState("fall2025");
+  const [summary, setSummary] = useState<CurriculumRoadmapSummaryDto | null>(
+    null
+  );
+  const [semesterDetails, setSemesterDetails] = useState<
+    Record<number, CurriculumSemesterDto>
+  >({});
+  const [selectedSemester, setSelectedSemester] = useState<number | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Mock semester data
-  const semesters = [
-    { id: "fall2025", name: "FALL2025", isActive: true },
-    { id: "summer2025", name: "SUMMER2025", isActive: false },
-    { id: "spring2025", name: "SPRING2025", isActive: false },
-    { id: "fall2024", name: "FALL2024", isActive: false },
-  ];
+  const semesters = useMemo(() => {
+    if (!summary) return [];
+    return summary.semesterSummaries;
+  }, [summary]);
 
-  // Mock course report data
-  const courseReports: CourseReport[] = [
-    {
-      courseCode: "HCM202",
-      courseName: "Ho Chi Minh Ideology",
-      className: "Half1_GD1705",
-      average: 9.5,
-      status: "Passed",
-    },
-    {
-      courseCode: "MLN131",
-      courseName: "Scientific socialism",
-      className: "Half1_GD1702",
-      average: 8.5,
-      status: "Passed",
-    },
-    {
-      courseCode: "VNR202",
-      courseName: "History of Vietnam Communist Party",
-      className: "Half2_GD1705",
-      average: 7.8,
-      status: "Passed",
-    },
-    {
-      courseCode: "SEP490",
-      courseName: "SE Capstone Project",
-      className: "FA25SE210_GFA130",
-      average: 8.9,
-      status: "Passed",
-    },
-  ];
+  const coursesForSelectedSemester: CurriculumRoadmapSubjectDto[] =
+    useMemo(() => {
+      if (!selectedSemester || !semesterDetails[selectedSemester]) return [];
+      const semester = semesterDetails[selectedSemester];
+      if (!semester) return [];
+      return semester.subjects.filter(
+        (s) => s.status === "InProgress" || s.status === "Completed"
+      );
+    }, [selectedSemester, semesterDetails]);
 
-  const renderCourseCard = (course: CourseReport) => {
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        const summaryData =
+          await RoadmapServices.getMyCurriculumRoadmapSummary();
+        setSummary(summaryData);
+
+        if (summaryData.semesterSummaries.length > 0) {
+          const firstSemester = summaryData.semesterSummaries[0].semesterNumber;
+          setSelectedSemester(firstSemester);
+
+          await Promise.all(
+            summaryData.semesterSummaries.map(async (sem) => {
+              try {
+                const semesterData =
+                  await RoadmapServices.getMyCurriculumSemester(
+                    sem.semesterNumber
+                  );
+                setSemesterDetails((prev) => ({
+                  ...prev,
+                  [sem.semesterNumber]: semesterData,
+                }));
+              } catch (err) {
+                console.error(
+                  "Không thể tải dữ liệu kỳ học:",
+                  sem.semesterNumber,
+                  err
+                );
+              }
+            })
+          );
+        }
+      } catch (error) {
+        console.error("Không thể tải bảng điểm (roadmap):", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void loadData();
+  }, []);
+
+  const getStatusLabel = (subject: CurriculumRoadmapSubjectDto) => {
+    switch (subject.status) {
+      case "Completed":
+        return "Hoàn thành";
+      case "InProgress":
+        return "Đang học";
+      case "Open":
+        return "Chưa học";
+      case "Locked":
+        return "Đã khóa";
+      default:
+        return "Đang học";
+    }
+  };
+
+  const renderCourseCard = (course: CurriculumRoadmapSubjectDto) => {
+    const statusLabel = getStatusLabel(course);
     return (
       <TouchableOpacity
-        key={course.courseCode}
+        key={course.subjectId}
         style={styles.courseCard}
         activeOpacity={0.8}
         onPress={() =>
           router.push(
-            `/(student)/(tabs)/mark-report-detail?courseCode=${course.courseCode}` as any
+            `/(student)/(tabs)/mark-report-detail?subjectId=${course.subjectId}` as any
           )
         }
       >
@@ -79,21 +118,27 @@ export default function MarkReportPage() {
           {/* Status Icon */}
           <View style={styles.statusIconContainer}>
             <View style={styles.statusIcon}>
-              <Text style={styles.statusIconText}>
-                {course.status === "Passed" ? "Passed" : "Failed"}
-              </Text>
+              <Text style={styles.statusIconText}>{statusLabel}</Text>
             </View>
           </View>
 
           {/* Course Info */}
           <View style={styles.courseInfo}>
             <Text style={styles.courseTitle}>
-              {course.courseCode} - {course.courseName}
+              {course.subjectCode} - {course.subjectName}
             </Text>
-            <Text style={styles.className}>Class name: {course.className}</Text>
+            {course.currentClassCode && (
+              <Text style={styles.className}>
+                Lớp: {course.currentClassCode}
+              </Text>
+            )}
             <View style={styles.averageContainer}>
-              <Text style={styles.averageLabel}>Average: </Text>
-              <Text style={styles.averageValue}>{course.average}</Text>
+              <Text style={styles.averageLabel}>Điểm trung bình: </Text>
+              <Text style={styles.averageValue}>
+                {course.finalScore !== null && course.finalScore !== undefined
+                  ? course.finalScore.toFixed(2)
+                  : "-"}
+              </Text>
             </View>
           </View>
         </View>
@@ -102,17 +147,19 @@ export default function MarkReportPage() {
   };
 
   const activeSemester = semesters.find(
-    (semester) => semester.id === selectedSemester
+    (semester) => semester.semesterNumber === selectedSemester
   );
 
   return (
     <View style={styles.container}>
       <BackHeader
-        title="Mark Report"
+        title="Bảng điểm"
         subtitle={
-          activeSemester ? `Học kỳ: ${activeSemester.name}` : undefined
+          activeSemester ? `Học kỳ: ${activeSemester.semesterName}` : undefined
         }
-        subtitleSmall={`Tổng môn: ${courseReports.length}`}
+        subtitleSmall={
+          summary ? `Tổng môn: ${summary.totalSubjects}` : undefined
+        }
         gradientColors={["#3674B5", "#1890ff"]}
         fallbackRoute="/(student)/(tabs)"
       />
@@ -125,26 +172,29 @@ export default function MarkReportPage() {
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={styles.semesterScroll}
           >
-            {semesters.map((semester) => (
-              <TouchableOpacity
-                key={semester.id}
-                style={[
-                  styles.semesterButton,
-                  semester.isActive && styles.activeSemesterButton,
-                ]}
-                onPress={() => setSelectedSemester(semester.id)}
-                activeOpacity={0.7}
-              >
-                <Text
+            {semesters.map((semester) => {
+              const isActive = semester.semesterNumber === selectedSemester;
+              return (
+                <TouchableOpacity
+                  key={semester.semesterNumber}
                   style={[
-                    styles.semesterButtonText,
-                    semester.isActive && styles.activeSemesterButtonText,
+                    styles.semesterButton,
+                    isActive && styles.activeSemesterButton,
                   ]}
+                  onPress={() => setSelectedSemester(semester.semesterNumber)}
+                  activeOpacity={0.7}
                 >
-                  {semester.name}
-                </Text>
-              </TouchableOpacity>
-            ))}
+                  <Text
+                    style={[
+                      styles.semesterButtonText,
+                      isActive && styles.activeSemesterButtonText,
+                    ]}
+                  >
+                    {semester.semesterName}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
           </ScrollView>
         </View>
 
@@ -154,7 +204,13 @@ export default function MarkReportPage() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.reportsContent}
         >
-          {courseReports.map((course) => renderCourseCard(course))}
+          {isLoading || !summary ? (
+            <Text style={styles.emptyText}>Đang tải dữ liệu bảng điểm...</Text>
+          ) : coursesForSelectedSemester.length === 0 ? (
+            <Text style={styles.emptyText}>Không có môn học trong học kỳ.</Text>
+          ) : (
+            coursesForSelectedSemester.map((course) => renderCourseCard(course))
+          )}
         </ScrollView>
       </View>
     </View>
@@ -210,6 +266,12 @@ const styles = StyleSheet.create({
   },
   reportsContent: {
     paddingBottom: 100,
+  },
+  emptyText: {
+    textAlign: "center",
+    color: "#666",
+    marginTop: 16,
+    fontSize: 14,
   },
   courseCard: {
     backgroundColor: "#fff",

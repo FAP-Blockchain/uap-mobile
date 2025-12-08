@@ -11,6 +11,9 @@ import {
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { RoadmapServices } from "@/services/student/roadmapServices";
 import { StudentAttendanceServices } from "@/services/student/attendanceServices";
+import { useSelector } from "react-redux";
+import { selectAuthLogin } from "@/lib/features/loginSlice";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import type {
   CurriculumRoadmapSummaryDto,
   CurriculumSemesterDto,
@@ -33,6 +36,7 @@ const palette = {
 };
 
 export default function AttendanceReportPage() {
+  const auth = useSelector(selectAuthLogin);
   const [summary, setSummary] = useState<CurriculumRoadmapSummaryDto | null>(
     null
   );
@@ -58,28 +62,7 @@ export default function AttendanceReportPage() {
   const [expandedSemesters, setExpandedSemesters] = useState<
     Record<number, boolean>
   >({});
-
-  const loadSummary = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await RoadmapServices.getMyCurriculumRoadmapSummary();
-      setSummary(data);
-      if (data.semesterSummaries.length > 0) {
-        const firstSemester = data.semesterSummaries[0].semesterNumber;
-        setExpandedSemesters({ [firstSemester]: true });
-        await loadSemester(firstSemester, data);
-      }
-    } catch (err: any) {
-      const message =
-        err?.response?.data?.message ||
-        err?.message ||
-        "Không thể tải dữ liệu lộ trình.";
-      setError(message);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const [isStudent, setIsStudent] = useState<boolean>(true);
 
   const loadSemester = useCallback(
     async (
@@ -87,7 +70,7 @@ export default function AttendanceReportPage() {
       currentSummary?: CurriculumRoadmapSummaryDto | null
     ) => {
       if (semesterDetails[semesterNumber]) return;
-      setLoadingSemesters((prev) => ({ ...prev, [semesterNumber]: true }));
+    setLoadingSemesters((prev) => ({ ...prev, [semesterNumber]: true }));
       try {
         const data: CurriculumSemesterDto =
           await RoadmapServices.getMyCurriculumSemester(semesterNumber);
@@ -119,13 +102,40 @@ export default function AttendanceReportPage() {
     [semesterDetails, summary, selectedSubjectId]
   );
 
-  useEffect(() => {
-    void loadSummary();
-  }, [loadSummary]);
+  const loadSummary = useCallback(async () => {
+    if (!isStudent) {
+      setError("Chức năng này chỉ dành cho sinh viên.");
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await RoadmapServices.getMyCurriculumRoadmapSummary();
+      setSummary(data);
+      if (data.semesterSummaries.length > 0) {
+        const firstSemester = data.semesterSummaries[0].semesterNumber;
+        setExpandedSemesters({ [firstSemester]: true });
+        await loadSemester(firstSemester, data);
+      }
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        "Không thể tải dữ liệu lộ trình.";
+      setError(message);
+    } finally {
+      setLoading(false);
+    }
+  }, [isStudent, loadSemester]);
 
   const onRefresh = async () => {
     setRefreshing(true);
     try {
+      if (!isStudent) {
+        setError("Chức năng này chỉ dành cho sinh viên.");
+        return;
+      }
       setSemesterDetails({});
       setSelectedSubjectId(null);
       setSelectedSubject(null);
@@ -170,6 +180,11 @@ export default function AttendanceReportPage() {
   );
 
   const loadAttendance = useCallback(async (subjectId: string) => {
+    if (!isStudent) {
+      setError("Chức năng này chỉ dành cho sinh viên.");
+      setAttendanceRecords([]);
+      return;
+    }
     setLoadingAttendance(true);
     setError(null);
     try {
@@ -187,7 +202,25 @@ export default function AttendanceReportPage() {
     } finally {
       setLoadingAttendance(false);
     }
-  }, []);
+  }, [isStudent]);
+
+  useEffect(() => {
+    const init = async () => {
+      const role =
+        ((await AsyncStorage.getItem("role")) || auth?.userProfile?.role || "")
+          .toString()
+          .toUpperCase();
+      const student = role === "STUDENT";
+      setIsStudent(student);
+      if (!student) {
+        setError("Chức năng này chỉ dành cho sinh viên.");
+        setLoading(false);
+        return;
+      }
+      await loadSummary();
+    };
+    void init();
+  }, [auth, loadSummary]);
 
   const attendanceSummary = useMemo(() => {
     const total = attendanceRecords.length;
