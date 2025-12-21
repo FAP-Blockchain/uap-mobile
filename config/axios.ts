@@ -5,7 +5,7 @@ import axios from "axios";
 // Đồng bộ với web: dùng đúng URL API; loại bỏ dấu "/" cuối để tránh // khi ghép path
 const API_BASE_URL = (
   process.env.EXPO_PUBLIC_API_URL ||
-  "https://uap-blockchain.azurewebsites.net/api"
+  "https://uap-api-594658851010.asia-southeast1.run.app/api"
 ).replace(/\/+$/, "");
 
 const api = axios.create({
